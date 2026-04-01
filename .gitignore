@@ -1,0 +1,21 @@
+# PlatformIO build artifacts
+.pio/
+
+# VS Code / PlatformIO IDE
+.vscode/
+
+# Python virtual environment
+venv/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Generated plots (re-generate from data)
+analysis/plots/*.png
+
+# macOS
+.DS_Store
+
+# SD card log files (keep locally, don't commit)
+*.csv

@@ -2,8 +2,9 @@
 """
 Moon Patrol iBooster DAQ — Log Analysis Script
 
-Loads CSV log files from the SD card, parses CAN frames and pressure data,
-prints summary statistics, and generates plots for protocol analysis.
+Loads CSV log files from the SD card, parses CAN frames, travel sensor data,
+and pressure readings. Prints summary statistics and generates plots for
+protocol analysis including travel-CAN byte correlation.
 
 Usage:
     # Activate venv first:
@@ -13,14 +14,16 @@ Usage:
     python analysis/analyze.py analysis/sample_data/run_001.csv
 """
 
-import sys
 import os
+import sys
 from pathlib import Path
 
-import pandas as pd
-import matplotlib.pyplot as plt
 import matplotlib
-matplotlib.use('Agg')  # Non-interactive backend for saving plots
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+matplotlib.use("Agg")  # Non-interactive backend for saving plots
 
 
 PLOTS_DIR = Path(__file__).parent / "plots"
@@ -31,9 +34,9 @@ def load_log(filepath):
     # Skip lines starting with '#' (run descriptions)
     lines = []
     header = None
-    with open(filepath, 'r') as f:
+    with open(filepath) as f:
         for line in f:
-            if line.startswith('#'):
+            if line.startswith("#"):
                 continue
             if header is None:
                 header = line.strip()
@@ -41,66 +44,67 @@ def load_log(filepath):
             lines.append(line.strip())
 
     if header is None:
-        print("ERROR: No header found in log file")
-        sys.exit(1)
+        raise ValueError(f"No header found in log file: {filepath}")
 
-    columns = header.split(',')
+    columns = header.split(",")
 
     # Parse data rows
     rows = []
     for line in lines:
         if not line:
             continue
-        parts = line.split(',')
+        parts = line.split(",")
         rows.append(parts)
 
     df = pd.DataFrame(rows, columns=columns)
 
     # Convert types
-    df['timestamp_ms'] = pd.to_numeric(df['timestamp_ms'], errors='coerce')
+    df["timestamp_ms"] = pd.to_numeric(df["timestamp_ms"], errors="coerce")
 
     return df
 
 
 def split_can_pressure(df):
-    """Split log into CAN frames and pressure readings."""
-    can_df = df[df['source'].str.startswith('CAN')].copy()
-    psi_df = df[df['source'] == 'PSI'].copy()
+    """Split log into CAN frames and sensor readings (travel + pressure)."""
+    can_df = df[df["source"].str.startswith("CAN")].copy()
+    # Support both new "ADC" and legacy "PSI" source labels
+    adc_df = df[df["source"].isin(["ADC", "PSI"])].copy()
 
-    # Parse pressure values
-    if not psi_df.empty:
-        psi_df['psi_front'] = pd.to_numeric(psi_df['psi_front'], errors='coerce')
-        psi_df['psi_rear'] = pd.to_numeric(psi_df['psi_rear'], errors='coerce')
+    # Parse sensor values
+    if not adc_df.empty:
+        for col in ["travel_v1", "travel_v2", "psi_front", "psi_rear"]:
+            if col in adc_df.columns:
+                adc_df[col] = pd.to_numeric(adc_df[col], errors="coerce")
 
     # Parse CAN data bytes to integers
-    data_cols = ['d0', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7']
+    data_cols = ["d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7"]
     for col in data_cols:
         if col in can_df.columns:
             can_df[col] = can_df[col].apply(
                 lambda x: int(x, 16) if isinstance(x, str) and x.strip() else None
             )
 
-    return can_df, psi_df
+    return can_df, adc_df
 
 
-def print_summary(can_df, psi_df, filepath):
+def print_summary(can_df, adc_df, filepath):
     """Print a summary of the log file."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  Log Analysis: {os.path.basename(filepath)}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
-    total = len(can_df) + len(psi_df)
+    total = len(can_df) + len(adc_df)
     if total == 0:
         print("  No data found in log file.")
         return
 
     t_min = min(
-        can_df['timestamp_ms'].min() if not can_df.empty else float('inf'),
-        psi_df['timestamp_ms'].min() if not psi_df.empty else float('inf'),
+        can_df["timestamp_ms"].min() if not can_df.empty else float("inf"),
+        adc_df["timestamp_ms"].min() if not adc_df.empty else float("inf"),
     )
     t_max = max(
-        can_df['timestamp_ms'].max() if not can_df.empty else 0,
-        psi_df['timestamp_ms'].max() if not psi_df.empty else 0,
+        can_df["timestamp_ms"].max() if not can_df.empty else 0,
+        adc_df["timestamp_ms"].max() if not adc_df.empty else 0,
     )
     duration_s = (t_max - t_min) / 1000.0
 
@@ -110,10 +114,10 @@ def print_summary(can_df, psi_df, filepath):
 
     # CAN summary
     if not can_df.empty:
-        for bus in sorted(can_df['source'].unique()):
-            bus_df = can_df[can_df['source'] == bus]
+        for bus in sorted(can_df["source"].unique()):
+            bus_df = can_df[can_df["source"] == bus]
             print(f"  --- {bus} ---")
-            ids = bus_df['can_id'].value_counts().sort_index()
+            ids = bus_df["can_id"].value_counts().sort_index()
             print(f"  Unique IDs: {len(ids)}")
             print(f"  {'ID':<10} {'Count':>8} {'Freq (Hz)':>10}")
             for can_id, count in ids.items():
@@ -121,41 +125,175 @@ def print_summary(can_df, psi_df, filepath):
                 print(f"  {can_id:<10} {count:>8} {freq:>10.1f}")
             print()
 
-    # Pressure summary
-    if not psi_df.empty:
-        print("  --- Pressure ---")
-        for col, label in [('psi_front', 'Front'), ('psi_rear', 'Rear')]:
-            vals = psi_df[col].dropna()
+    # Travel sensor summary
+    if not adc_df.empty and "travel_v1" in adc_df.columns:
+        has_travel = False
+        for col, label in [("travel_v1", "Travel 1"), ("travel_v2", "Travel 2")]:
+            vals = adc_df[col].dropna()
             if not vals.empty:
-                print(f"  {label}: min={vals.min():.1f}  max={vals.max():.1f}  "
-                      f"avg={vals.mean():.1f}  PSI")
-        print()
+                has_travel = True
+                print(
+                    f"  {label}: min={vals.min():.3f}V  max={vals.max():.3f}V  "
+                    f"avg={vals.mean():.3f}V"
+                )
+        if has_travel:
+            print()
+
+    # Pressure summary
+    if not adc_df.empty:
+        has_pressure = False
+        for col, label in [("psi_front", "Front"), ("psi_rear", "Rear")]:
+            if col not in adc_df.columns:
+                continue
+            vals = adc_df[col].dropna()
+            if not vals.empty:
+                has_pressure = True
+                print(
+                    f"  {label}: min={vals.min():.1f}  max={vals.max():.1f}  "
+                    f"avg={vals.mean():.1f}  PSI"
+                )
+        if has_pressure:
+            print()
 
 
-def plot_pressure(psi_df, run_name):
+def plot_pressure(adc_df, run_name):
     """Plot pressure vs time."""
-    if psi_df.empty:
+    if adc_df.empty:
         print("  No pressure data to plot.")
         return
 
-    t = (psi_df['timestamp_ms'] - psi_df['timestamp_ms'].iloc[0]) / 1000.0
+    has_front = "psi_front" in adc_df.columns and adc_df["psi_front"].notna().any()
+    has_rear = "psi_rear" in adc_df.columns and adc_df["psi_rear"].notna().any()
+
+    if not has_front and not has_rear:
+        print("  No pressure data to plot.")
+        return
+
+    t = (adc_df["timestamp_ms"] - adc_df["timestamp_ms"].iloc[0]) / 1000.0
 
     fig, ax = plt.subplots(figsize=(12, 5))
-    if psi_df['psi_front'].notna().any():
-        ax.plot(t, psi_df['psi_front'], label='Front', linewidth=0.8)
-    if psi_df['psi_rear'].notna().any():
-        ax.plot(t, psi_df['psi_rear'], label='Rear', linewidth=0.8)
+    if has_front:
+        ax.plot(t, adc_df["psi_front"], label="Front", linewidth=0.8)
+    if has_rear:
+        ax.plot(t, adc_df["psi_rear"], label="Rear", linewidth=0.8)
 
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Pressure (PSI)')
-    ax.set_title(f'{run_name} — Brake Pressure')
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Pressure (PSI)")
+    ax.set_title(f"{run_name} — Brake Pressure")
     ax.legend()
     ax.grid(True, alpha=0.3)
 
     outpath = PLOTS_DIR / f"{run_name}_pressure.png"
-    fig.savefig(outpath, dpi=150, bbox_inches='tight')
+    fig.savefig(outpath, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"  Saved: {outpath}")
+
+
+def plot_travel(adc_df, run_name):
+    """Plot travel sensor voltages vs time."""
+    if adc_df.empty:
+        print("  No travel data to plot.")
+        return
+
+    has_t1 = "travel_v1" in adc_df.columns and adc_df["travel_v1"].notna().any()
+    has_t2 = "travel_v2" in adc_df.columns and adc_df["travel_v2"].notna().any()
+
+    if not has_t1 and not has_t2:
+        print("  No travel data to plot.")
+        return
+
+    t = (adc_df["timestamp_ms"] - adc_df["timestamp_ms"].iloc[0]) / 1000.0
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    if has_t1:
+        ax.plot(t, adc_df["travel_v1"], label="Travel 1 (A0)", linewidth=0.8)
+    if has_t2:
+        ax.plot(t, adc_df["travel_v2"], label="Travel 2 (A1)", linewidth=0.8)
+
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Voltage (V)")
+    ax.set_title(f"{run_name} — iBooster Travel Sensor")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    outpath = PLOTS_DIR / f"{run_name}_travel.png"
+    fig.savefig(outpath, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  Saved: {outpath}")
+
+
+def plot_travel_correlation(can_df, adc_df, run_name):
+    """Scatter plot of CAN data bytes vs travel sensor voltage.
+
+    For each unique CAN ID, correlates each changing data byte with the
+    nearest travel sensor reading. Bytes that show a linear relationship
+    are likely pushrod position encodings.
+    """
+    if can_df.empty or adc_df.empty:
+        print("  No data for travel correlation plots.")
+        return
+
+    if "travel_v1" not in adc_df.columns or adc_df["travel_v1"].dropna().empty:
+        print("  No travel data for correlation plots.")
+        return
+
+    data_cols = ["d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7"]
+
+    # Prepare ADC data for merge_asof (must be sorted by timestamp)
+    travel = adc_df[["timestamp_ms", "travel_v1"]].dropna().sort_values("timestamp_ms")
+    if travel.empty:
+        return
+
+    for bus in sorted(can_df["source"].unique()):
+        bus_df = can_df[can_df["source"] == bus]
+        unique_ids = sorted(bus_df["can_id"].unique())
+
+        for can_id in unique_ids:
+            id_df = bus_df[bus_df["can_id"] == can_id].copy()
+
+            # Find which bytes change
+            changing = []
+            for col in data_cols:
+                vals = id_df[col].dropna()
+                if len(vals) > 0 and vals.nunique() > 1:
+                    changing.append(col)
+
+            if not changing:
+                continue
+
+            # Merge with nearest travel reading
+            id_sorted = id_df[["timestamp_ms", *changing]].sort_values("timestamp_ms")
+            merged = pd.merge_asof(id_sorted, travel, on="timestamp_ms", direction="nearest")
+
+            n_plots = len(changing)
+            fig, axes = plt.subplots(1, n_plots, figsize=(4 * n_plots, 4), squeeze=False)
+            axes = axes[0]  # squeeze=False gives 2D array, take first row
+
+            for ax, col in zip(axes, changing, strict=True):
+                valid = merged[[col, "travel_v1"]].dropna()
+                if valid.empty:
+                    continue
+                ax.scatter(valid["travel_v1"], valid[col], s=1, alpha=0.3)
+                ax.set_xlabel("Travel V1 (V)")
+                ax.set_ylabel(f"{col.upper()} value")
+                ax.set_ylim(-5, 260)
+                ax.grid(True, alpha=0.3)
+
+                # Show correlation coefficient
+                if len(valid) > 2:
+                    corr = np.corrcoef(valid["travel_v1"], valid[col])[0, 1]
+                    ax.set_title(f"{col.upper()} (r={corr:.2f})")
+                else:
+                    ax.set_title(col.upper())
+
+            safe_id = can_id.replace("0x", "")
+            fig.suptitle(f"{run_name} — {bus} ID {can_id} — Byte vs Travel", fontsize=12)
+            fig.tight_layout()
+
+            outpath = PLOTS_DIR / f"{run_name}_{bus}_{safe_id}_corr.png"
+            fig.savefig(outpath, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+            print(f"  Saved: {outpath}")
 
 
 def plot_can_bytes(can_df, run_name):
@@ -164,15 +302,15 @@ def plot_can_bytes(can_df, run_name):
         print("  No CAN data to plot.")
         return
 
-    data_cols = ['d0', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7']
+    data_cols = ["d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7"]
 
-    for bus in sorted(can_df['source'].unique()):
-        bus_df = can_df[can_df['source'] == bus]
-        unique_ids = sorted(bus_df['can_id'].unique())
+    for bus in sorted(can_df["source"].unique()):
+        bus_df = can_df[can_df["source"] == bus]
+        unique_ids = sorted(bus_df["can_id"].unique())
 
         for can_id in unique_ids:
-            id_df = bus_df[bus_df['can_id'] == can_id].copy()
-            t = (id_df['timestamp_ms'] - id_df['timestamp_ms'].iloc[0]) / 1000.0
+            id_df = bus_df[bus_df["can_id"] == can_id].copy()
+            t = (id_df["timestamp_ms"] - id_df["timestamp_ms"].iloc[0]) / 1000.0
 
             # Find which bytes actually change
             changing = []
@@ -185,25 +323,23 @@ def plot_can_bytes(can_df, run_name):
                 continue  # Skip IDs with static data
 
             n_plots = len(changing)
-            fig, axes = plt.subplots(n_plots, 1, figsize=(12, 2.5 * n_plots),
-                                     sharex=True)
+            fig, axes = plt.subplots(n_plots, 1, figsize=(12, 2.5 * n_plots), sharex=True)
             if n_plots == 1:
                 axes = [axes]
 
-            for ax, col in zip(axes, changing):
-                ax.plot(t, id_df[col], linewidth=0.5, marker='.', markersize=1)
+            for ax, col in zip(axes, changing, strict=True):
+                ax.plot(t, id_df[col], linewidth=0.5, marker=".", markersize=1)
                 ax.set_ylabel(col.upper())
                 ax.grid(True, alpha=0.3)
                 ax.set_ylim(-5, 260)
 
-            axes[-1].set_xlabel('Time (s)')
-            safe_id = can_id.replace('0x', '')
-            fig.suptitle(f'{run_name} — {bus} ID {can_id} — Changing Bytes',
-                         fontsize=12)
+            axes[-1].set_xlabel("Time (s)")
+            safe_id = can_id.replace("0x", "")
+            fig.suptitle(f"{run_name} — {bus} ID {can_id} — Changing Bytes", fontsize=12)
             fig.tight_layout()
 
             outpath = PLOTS_DIR / f"{run_name}_{bus}_{safe_id}_bytes.png"
-            fig.savefig(outpath, dpi=150, bbox_inches='tight')
+            fig.savefig(outpath, dpi=150, bbox_inches="tight")
             plt.close(fig)
             print(f"  Saved: {outpath}")
 
@@ -226,19 +362,25 @@ def main():
 
     # Load and parse
     print(f"Loading {filepath}...")
-    df = load_log(filepath)
-    can_df, psi_df = split_can_pressure(df)
+    try:
+        df = load_log(filepath)
+    except ValueError as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+    can_df, adc_df = split_can_pressure(df)
 
     # Summary
-    print_summary(can_df, psi_df, filepath)
+    print_summary(can_df, adc_df, filepath)
 
     # Plots
     print("Generating plots...")
-    plot_pressure(psi_df, run_name)
+    plot_travel(adc_df, run_name)
+    plot_pressure(adc_df, run_name)
     plot_can_bytes(can_df, run_name)
+    plot_travel_correlation(can_df, adc_df, run_name)
 
     print(f"\nDone. Plots saved to {PLOTS_DIR}/")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

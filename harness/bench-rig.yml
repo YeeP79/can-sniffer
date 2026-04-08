@@ -1,0 +1,663 @@
+metadata:
+  title: "Moon Patrol — iBooster Bench Test Rig Wiring Harness"
+  description: "Bench rig for Bosch Gen 2 iBooster (2019 Honda Accord)"
+  notes: >
+    12V source: bench power supply (5A+) or car battery.
+    iBooster CAN pin numbers TBD — verify on actual unit.
+    Phase 2 connections (pressure transducers) are NOT connected initially.
+
+options:
+  bgcolor: WH
+  fontname: arial
+
+connectors:
+
+  # === POWER ===
+
+  12V_Supply:
+    type: Bench Power Supply / Car Battery
+    pins: [V+, V-]
+    pinlabels: [12V Positive, Ground / Negative]
+    notes: "5A+ capable"
+
+  Fuse_40A:
+    type: Inline Fuse Holder (40A)
+    pins: [In, Out]
+    pinlabels: [From Supply, To iBooster Pin 1]
+
+  Fuse_5A:
+    type: Inline Fuse Holder (5A)
+    pins: [In, Out]
+    pinlabels: [From Supply, To iBooster Pin 20]
+
+  Buck_Converter:
+    type: 12V to 5V Buck Converter
+    pins: [Vin, GND_in, Vout, GND_out]
+    pinlabels: [12V Input, Ground In, 5V Output, Ground Out]
+
+  # === iBooster ===
+
+  iBooster_ECU:
+    type: "Bosch Gen 2 iBooster — 26-pin ECU Connector"
+    pins: [1, 2, 8, 9, 20, 22, 23, CAN1_H, CAN1_L, CAN2_H, CAN2_L]
+    pinlabels:
+      - "Pin 1: 12V+ permanent"
+      - "Pin 2: Pedal sensor 2"
+      - "Pin 8: Pedal sensor 4"
+      - "Pin 9: GND"
+      - "Pin 20: 12V+ ignition switched"
+      - "Pin 22: Pedal sensor 1"
+      - "Pin 23: Pedal sensor 3"
+      - "CAN1_H (TBD — verify on unit)"
+      - "CAN1_L (TBD — verify on unit)"
+      - "CAN2_H (TBD — verify on unit)"
+      - "CAN2_L (TBD — verify on unit)"
+    notes: >
+      Only populated pins shown. CAN bus pin numbers TBD —
+      verify on actual iBooster unit before wiring.
+
+  iBooster_TravelSensor:
+    type: "Bosch Gen 2 Travel Sensor — 4-pin"
+    pins: [1, 2, 3, 4]
+    pinlabels:
+      - "Sensor signal 1 (→ ECU pin 22)"
+      - "Sensor signal 2 (→ ECU pin 2)"
+      - "Sensor signal 3 (→ ECU pin 23)"
+      - "Sensor signal 4 (→ ECU pin 8)"
+
+  # === ESP32 + PERIPHERALS ===
+
+  ESP32:
+    type: "HiLetgo ESP32-WROOM-32 (38-pin)"
+    pins: [GPIO4, GPIO5, GPIO23, GPIO19, GPIO18, GPIO15, GPIO16, GPIO2, GPIO21, GPIO22, 3V3, 5V, GND, USB]
+    pinlabels:
+      - "GPIO 4 — TWAI CAN TX"
+      - "GPIO 5 — TWAI CAN RX"
+      - "GPIO 23 — SPI MOSI"
+      - "GPIO 19 — SPI MISO"
+      - "GPIO 18 — SPI SCK"
+      - "GPIO 15 — MCP2515 CS"
+      - "GPIO 16 — SD Card CS"
+      - "GPIO 2 — MCP2515 INT"
+      - "GPIO 21 — I2C SDA"
+      - "GPIO 22 — I2C SCL"
+      - "3.3V Output"
+      - "5V (USB passthrough)"
+      - "GND"
+      - "USB-C"
+
+  SN65HVD230:
+    type: "Waveshare CAN Transceiver (3.3V)"
+    subtype: "CAN Bus #1"
+    pins: [VCC, GND, TX, RX, CANH, CANL]
+    pinlabels: [3.3V, Ground, TX (from ESP32), RX (to ESP32), CAN High, CAN Low]
+    notes: "120Ω termination resistor across CANH-CANL"
+
+  MCP2515:
+    type: "MCP2515 + TJA1050 CAN Module (5V)"
+    subtype: "CAN Bus #2"
+    pins: [VCC, GND, SI, SO, SCK, CS, INT, CANH, CANL]
+    pinlabels: [5V (NOT 3.3V!), Ground, MOSI, MISO, SCK, CS, INT, CAN High, CAN Low]
+    notes: "120Ω termination resistor across CANH-CANL"
+
+  ADS1115:
+    type: "ADS1115 16-bit ADC (I2C)"
+    pins: [VDD, GND, SDA, SCL, A0, A1, A2, A3]
+    pinlabels:
+      - "3.3V"
+      - "Ground"
+      - "I2C SDA"
+      - "I2C SCL"
+      - "A0: Travel sensor 1 (TAP splice)"
+      - "A1: Travel sensor 2 (TAP splice)"
+      - "A2: Front pressure (PHASE 2)"
+      - "A3: Rear pressure (PHASE 2)"
+
+  SD_Module:
+    type: "Micro SD Card SPI Module"
+    pins: [VCC, GND, MOSI, MISO, SCK, CS]
+    pinlabels: [3.3V, Ground, MOSI, MISO, SCK, CS]
+
+  # === PHASE 2 — PRESSURE ===
+
+  Pressure_Front:
+    type: "Low Dollar Motorsports 0-3000 PSI"
+    subtype: "PHASE 2 — NOT CONNECTED INITIALLY"
+    pins: [VCC, GND, Signal]
+    pinlabels: ["5V", "Ground", "0.5-4.5V Output"]
+    notes: "1/8-27 NPT → Wilwood MC front port"
+
+  Pressure_Rear:
+    type: "Low Dollar Motorsports 0-3000 PSI"
+    subtype: "PHASE 2 — NOT CONNECTED INITIALLY"
+    pins: [VCC, GND, Signal]
+    pinlabels: ["5V", "Ground", "0.5-4.5V Output"]
+    notes: "1/8-27 NPT → Wilwood MC rear port"
+
+  # === HOST ===
+
+  MacBook:
+    type: MacBook Pro
+    pins: [USB]
+    pinlabels: [USB-C]
+
+  # === GROUND BUS ===
+
+  GND_Bus:
+    type: "Common Ground Bus (breadboard rail)"
+    style: simple
+    notes: "All grounds tied together"
+
+  # === TAP SPLICES ===
+
+  Tap_Sensor1:
+    type: "Solder splice / T-tap"
+    subtype: "Signal passes through to ECU"
+    style: simple
+    notes: "Travel sensor 1 → ECU pin 22, branch to ADS1115 A0"
+
+  Tap_Sensor2:
+    type: "Solder splice / T-tap"
+    subtype: "Signal passes through to ECU"
+    style: simple
+    notes: "Travel sensor 2 → ECU pin 2, branch to ADS1115 A1"
+
+
+cables:
+
+  # === 12V POWER RUNS ===
+
+  W_Supply_Fuse40:
+    wirecount: 1
+    gauge: 10 AWG
+    colors: [RD]
+    wirelabels: ["12V+ → 40A Fuse"]
+
+  W_Fuse40_ECU:
+    wirecount: 1
+    gauge: 10 AWG
+    colors: [RD]
+    wirelabels: ["40A → iBooster Pin 1"]
+
+  W_Supply_Fuse5:
+    wirecount: 1
+    gauge: 18 AWG
+    colors: [RDWH]
+    wirelabels: ["12V+ → 5A Fuse"]
+
+  W_Fuse5_ECU:
+    wirecount: 1
+    gauge: 18 AWG
+    colors: [RDWH]
+    wirelabels: ["5A → iBooster Pin 20 (ign switched)"]
+
+  W_Supply_GND_ECU:
+    wirecount: 1
+    gauge: 10 AWG
+    colors: [BK]
+    wirelabels: ["GND → iBooster Pin 9"]
+
+  W_Supply_Buck_Power:
+    wirecount: 2
+    gauge: 18 AWG
+    colors: [RD, BK]
+    wirelabels: ["12V+ to Buck", "GND to Buck"]
+
+  # === 5V DISTRIBUTION ===
+
+  W_Buck_MCP:
+    wirecount: 1
+    gauge: 18 AWG
+    colors: [RD]
+    wirelabels: ["5V → MCP2515"]
+
+  W_Buck_PressF:
+    wirecount: 1
+    gauge: 22 AWG
+    colors: [RD]
+    wirelabels: ["5V → Front Pressure (PHASE 2)"]
+    notes: "PHASE 2 — NOT CONNECTED INITIALLY"
+
+  W_Buck_PressR:
+    wirecount: 1
+    gauge: 22 AWG
+    colors: [RD]
+    wirelabels: ["5V → Rear Pressure (PHASE 2)"]
+    notes: "PHASE 2 — NOT CONNECTED INITIALLY"
+
+  # === 3.3V DISTRIBUTION ===
+
+  W_3V3_SN65:
+    wirecount: 1
+    gauge: 22 AWG
+    colors: [RD]
+    wirelabels: ["3.3V → SN65HVD230"]
+
+  W_3V3_ADS:
+    wirecount: 1
+    gauge: 22 AWG
+    colors: [RD]
+    wirelabels: ["3.3V → ADS1115"]
+
+  W_3V3_SD:
+    wirecount: 1
+    gauge: 22 AWG
+    colors: [RD]
+    wirelabels: ["3.3V → SD Module"]
+
+  # === GROUND BUS WIRES ===
+
+  W_GND_ESP:
+    wirecount: 1
+    colors: [BK]
+    wirelabels: ["ESP32 GND"]
+
+  W_GND_SN65:
+    wirecount: 1
+    colors: [BK]
+    wirelabels: ["SN65HVD230 GND"]
+
+  W_GND_MCP:
+    wirecount: 1
+    colors: [BK]
+    wirelabels: ["MCP2515 GND"]
+
+  W_GND_ADS:
+    wirecount: 1
+    colors: [BK]
+    wirelabels: ["ADS1115 GND"]
+
+  W_GND_SD:
+    wirecount: 1
+    colors: [BK]
+    wirelabels: ["SD Module GND"]
+
+  W_GND_Supply:
+    wirecount: 1
+    gauge: 10 AWG
+    colors: [BK]
+    wirelabels: ["12V Supply GND"]
+
+  W_GND_Buck:
+    wirecount: 1
+    colors: [BK]
+    wirelabels: ["Buck Converter GND"]
+
+  W_GND_PressF:
+    wirecount: 1
+    colors: [BK]
+    wirelabels: ["Front Pressure GND (PHASE 2)"]
+    notes: "PHASE 2"
+
+  W_GND_PressR:
+    wirecount: 1
+    colors: [BK]
+    wirelabels: ["Rear Pressure GND (PHASE 2)"]
+    notes: "PHASE 2"
+
+  # === CAN BUS #1 (ESP32 TWAI → SN65HVD230 → iBooster) ===
+
+  W_CAN1_Logic:
+    wirecount: 2
+    gauge: 22 AWG
+    colors: [YE, GN]
+    wirelabels: ["TWAI TX (GPIO 4)", "TWAI RX (GPIO 5)"]
+
+  W_CAN1_Bus:
+    wirecount: 2
+    gauge: 22 AWG
+    colors: [YE, GNBU]
+    wirelabels: ["CAN1 High", "CAN1 Low"]
+    notes: "120Ω termination at SN65HVD230 end"
+
+  # === CAN BUS #2 (ESP32 SPI → MCP2515 → iBooster) ===
+
+  W_CAN2_SPI:
+    wirecount: 5
+    gauge: 22 AWG
+    colors: [BU, OG, WH, VT, GY]
+    wirelabels: ["MOSI (GPIO 23)", "MISO (GPIO 19)", "SCK (GPIO 18)", "CS (GPIO 15)", "INT (GPIO 2)"]
+
+  W_CAN2_Bus:
+    wirecount: 2
+    gauge: 22 AWG
+    colors: [YE, GNBU]
+    wirelabels: ["CAN2 High", "CAN2 Low"]
+    notes: "120Ω termination at MCP2515 end"
+
+  # === SPI SD CARD ===
+
+  W_SPI_SD:
+    wirecount: 4
+    gauge: 22 AWG
+    colors: [BU, OG, WH, BN]
+    wirelabels: ["MOSI (shared)", "MISO (shared)", "SCK (shared)", "SD CS (GPIO 16)"]
+    notes: "MOSI/MISO/SCK shared with MCP2515 SPI bus"
+
+  # === I2C ===
+
+  W_I2C:
+    wirecount: 2
+    gauge: 22 AWG
+    colors: [BU, YE]
+    wirelabels: ["SDA (GPIO 21)", "SCL (GPIO 22)"]
+
+  # === TRAVEL SENSOR ===
+
+  W_Travel_1_to_Tap:
+    wirecount: 1
+    gauge: 22 AWG
+    wirelabels: ["Sensor 1 → Tap"]
+
+  W_Tap1_to_ECU:
+    wirecount: 1
+    gauge: 22 AWG
+    wirelabels: ["Tap → ECU Pin 22"]
+
+  W_Tap1_to_ADC:
+    wirecount: 1
+    gauge: 22 AWG
+    wirelabels: ["Tap → ADS1115 A0"]
+
+  W_Travel_2_to_Tap:
+    wirecount: 1
+    gauge: 22 AWG
+    wirelabels: ["Sensor 2 → Tap"]
+
+  W_Tap2_to_ECU:
+    wirecount: 1
+    gauge: 22 AWG
+    wirelabels: ["Tap → ECU Pin 2"]
+
+  W_Tap2_to_ADC:
+    wirecount: 1
+    gauge: 22 AWG
+    wirelabels: ["Tap → ADS1115 A1"]
+
+  W_Travel_3:
+    wirecount: 1
+    gauge: 22 AWG
+    wirelabels: ["Sensor 3 → ECU Pin 23"]
+
+  W_Travel_4:
+    wirecount: 1
+    gauge: 22 AWG
+    wirelabels: ["Sensor 4 → ECU Pin 8"]
+
+  # === PRESSURE TRANSDUCERS (PHASE 2) ===
+
+  W_PressF_Signal:
+    wirecount: 1
+    gauge: 22 AWG
+    colors: [WH]
+    wirelabels: ["Front Pressure Signal"]
+    notes: "PHASE 2 — NOT CONNECTED INITIALLY"
+
+  W_PressR_Signal:
+    wirecount: 1
+    gauge: 22 AWG
+    colors: [WH]
+    wirelabels: ["Rear Pressure Signal"]
+    notes: "PHASE 2 — NOT CONNECTED INITIALLY"
+
+  # === USB ===
+
+  W_USB:
+    wirecount: 1
+    wirelabels: ["USB-C Cable"]
+
+
+connections:
+
+  # ============================================================
+  # 12V POWER — Main supply to fuses to iBooster
+  # ============================================================
+
+  # 12V Supply → 40A Fuse → iBooster Pin 1
+  -
+    - 12V_Supply: [V+]
+    - W_Supply_Fuse40: [1]
+    - Fuse_40A: [In]
+  -
+    - Fuse_40A: [Out]
+    - W_Fuse40_ECU: [1]
+    - iBooster_ECU: [1]
+
+  # 12V Supply → 5A Fuse → iBooster Pin 20
+  -
+    - 12V_Supply: [V+]
+    - W_Supply_Fuse5: [1]
+    - Fuse_5A: [In]
+  -
+    - Fuse_5A: [Out]
+    - W_Fuse5_ECU: [1]
+    - iBooster_ECU: [20]
+
+  # 12V Supply GND → iBooster Pin 9
+  -
+    - 12V_Supply: [V-]
+    - W_Supply_GND_ECU: [1]
+    - iBooster_ECU: [9]
+
+  # 12V Supply → Buck Converter
+  -
+    - 12V_Supply: [V+, V-]
+    - W_Supply_Buck_Power: [1, 2]
+    - Buck_Converter: [Vin, GND_in]
+
+  # ============================================================
+  # 5V DISTRIBUTION — Buck converter to 5V devices
+  # ============================================================
+
+  # Buck 5V → MCP2515
+  -
+    - Buck_Converter: [Vout]
+    - W_Buck_MCP: [1]
+    - MCP2515: [VCC]
+
+  # Buck 5V → Front Pressure (Phase 2)
+  -
+    - Buck_Converter: [Vout]
+    - W_Buck_PressF: [1]
+    - Pressure_Front: [VCC]
+
+  # Buck 5V → Rear Pressure (Phase 2)
+  -
+    - Buck_Converter: [Vout]
+    - W_Buck_PressR: [1]
+    - Pressure_Rear: [VCC]
+
+  # ============================================================
+  # 3.3V DISTRIBUTION — ESP32 3V3 to peripherals
+  # ============================================================
+
+  -
+    - ESP32: [3V3]
+    - W_3V3_SN65: [1]
+    - SN65HVD230: [VCC]
+
+  -
+    - ESP32: [3V3]
+    - W_3V3_ADS: [1]
+    - ADS1115: [VDD]
+
+  -
+    - ESP32: [3V3]
+    - W_3V3_SD: [1]
+    - SD_Module: [VCC]
+
+  # ============================================================
+  # GROUND BUS — All grounds to common bus
+  # ============================================================
+
+  -
+    - ESP32: [GND]
+    - W_GND_ESP: [1]
+    - GND_Bus: [1]
+
+  -
+    - SN65HVD230: [GND]
+    - W_GND_SN65: [1]
+    - GND_Bus: [1]
+
+  -
+    - MCP2515: [GND]
+    - W_GND_MCP: [1]
+    - GND_Bus: [1]
+
+  -
+    - ADS1115: [GND]
+    - W_GND_ADS: [1]
+    - GND_Bus: [1]
+
+  -
+    - SD_Module: [GND]
+    - W_GND_SD: [1]
+    - GND_Bus: [1]
+
+  -
+    - 12V_Supply: [V-]
+    - W_GND_Supply: [1]
+    - GND_Bus: [1]
+
+  -
+    - Buck_Converter: [GND_out]
+    - W_GND_Buck: [1]
+    - GND_Bus: [1]
+
+  -
+    - Pressure_Front: [GND]
+    - W_GND_PressF: [1]
+    - GND_Bus: [1]
+
+  -
+    - Pressure_Rear: [GND]
+    - W_GND_PressR: [1]
+    - GND_Bus: [1]
+
+  # ============================================================
+  # CAN BUS #1 — ESP32 TWAI → SN65HVD230 → iBooster
+  # ============================================================
+
+  # Logic side: ESP32 GPIOs to transceiver
+  -
+    - ESP32: [GPIO4, GPIO5]
+    - W_CAN1_Logic: [1, 2]
+    - SN65HVD230: [TX, RX]
+
+  # Bus side: transceiver to iBooster (+ 120Ω termination)
+  -
+    - SN65HVD230: [CANH, CANL]
+    - W_CAN1_Bus: [1, 2]
+    - iBooster_ECU: [CAN1_H, CAN1_L]
+
+  # ============================================================
+  # CAN BUS #2 — ESP32 SPI → MCP2515 → iBooster
+  # ============================================================
+
+  # SPI side: ESP32 GPIOs to MCP2515
+  -
+    - ESP32: [GPIO23, GPIO19, GPIO18, GPIO15, GPIO2]
+    - W_CAN2_SPI: [1, 2, 3, 4, 5]
+    - MCP2515: [SI, SO, SCK, CS, INT]
+
+  # Bus side: MCP2515 to iBooster (+ 120Ω termination)
+  -
+    - MCP2515: [CANH, CANL]
+    - W_CAN2_Bus: [1, 2]
+    - iBooster_ECU: [CAN2_H, CAN2_L]
+
+  # ============================================================
+  # SPI SD CARD — Shared bus with unique CS
+  # ============================================================
+
+  -
+    - ESP32: [GPIO23, GPIO19, GPIO18, GPIO16]
+    - W_SPI_SD: [1, 2, 3, 4]
+    - SD_Module: [MOSI, MISO, SCK, CS]
+
+  # ============================================================
+  # I2C — ESP32 to ADS1115
+  # ============================================================
+
+  -
+    - ESP32: [GPIO21, GPIO22]
+    - W_I2C: [1, 2]
+    - ADS1115: [SDA, SCL]
+
+  # ============================================================
+  # TRAVEL SENSOR — Sensor → Tap splice → ECU + ADC branch
+  # ============================================================
+
+  # Sensor 1 → Tap → ECU Pin 22 (with branch to ADS1115 A0)
+  -
+    - iBooster_TravelSensor: [1]
+    - W_Travel_1_to_Tap: [1]
+    - Tap_Sensor1: [1]
+  -
+    - Tap_Sensor1: [1]
+    - W_Tap1_to_ECU: [1]
+    - iBooster_ECU: [22]
+  -
+    - Tap_Sensor1: [1]
+    - W_Tap1_to_ADC: [1]
+    - ADS1115: [A0]
+
+  # Sensor 2 → Tap → ECU Pin 2 (with branch to ADS1115 A1)
+  -
+    - iBooster_TravelSensor: [2]
+    - W_Travel_2_to_Tap: [1]
+    - Tap_Sensor2: [1]
+  -
+    - Tap_Sensor2: [1]
+    - W_Tap2_to_ECU: [1]
+    - iBooster_ECU: [2]
+  -
+    - Tap_Sensor2: [1]
+    - W_Tap2_to_ADC: [1]
+    - ADS1115: [A1]
+
+  # Sensor 3 → ECU Pin 23 (no tap, passthrough only)
+  -
+    - iBooster_TravelSensor: [3]
+    - W_Travel_3: [1]
+    - iBooster_ECU: [23]
+
+  # Sensor 4 → ECU Pin 8 (no tap, passthrough only)
+  -
+    - iBooster_TravelSensor: [4]
+    - W_Travel_4: [1]
+    - iBooster_ECU: [8]
+
+  # ============================================================
+  # PRESSURE TRANSDUCERS — Phase 2
+  # ============================================================
+
+  -
+    - Pressure_Front: [Signal]
+    - W_PressF_Signal: [1]
+    - ADS1115: [A2]
+
+  -
+    - Pressure_Rear: [Signal]
+    - W_PressR_Signal: [1]
+    - ADS1115: [A3]
+
+  # ============================================================
+  # USB — ESP32 to MacBook
+  # ============================================================
+
+  -
+    - ESP32: [USB]
+    - W_USB: [1]
+    - MacBook: [USB]
+
+additional_bom_items:
+  -
+    description: "120Ω Resistor — CAN Bus #1 termination"
+    qty: 1
+    designators: SN65HVD230
+  -
+    description: "120Ω Resistor — CAN Bus #2 termination"
+    qty: 1
+    designators: MCP2515

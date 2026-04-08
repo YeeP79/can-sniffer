@@ -257,9 +257,35 @@ can-sniffer/
 │   └── check_size.sh         # Firmware size checker (flash/RAM vs ESP32 limits)
 ├── Makefile                  # Convenience build/test/lint targets
 ├── .github/workflows/ci.yml  # GitHub Actions CI pipeline
+├── harness/
+│   ├── bench-rig.yml         # WireViz source — bench test rig harness
+│   ├── bench-rig.svg         # Generated diagram (SVG)
+│   ├── bench-rig.png         # Generated diagram (PNG)
+│   ├── bench-rig.html        # Generated interactive diagram
+│   └── moon-patrol.yml       # Future — full vehicle harness
 ├── lib/                      # Project-specific libraries
 └── venv/                     # Python virtual environment
 ```
+
+## Wiring Harness Documentation
+
+Wiring harness diagrams are generated with [WireViz](https://github.com/formatc1702/WireViz).
+
+The bench rig harness diagram lives in `harness/bench-rig.yml` and documents all connections for the iBooster bench test rig including power distribution, dual CAN buses, SPI/I2C peripherals, travel sensor tap splices, and Phase 2 pressure transducers.
+
+### Regenerating diagrams
+
+```bash
+source venv/bin/activate
+cd harness
+wireviz bench-rig.yml
+```
+
+This produces `bench-rig.svg`, `bench-rig.png`, `bench-rig.html`, and `bench-rig.bom.tsv` in the same directory.
+
+### PCB Design
+
+[KiCad](https://www.kicad.org/) is available for future PCB design of the production ESP32 CAN gateway board.
 
 ## Notes
 

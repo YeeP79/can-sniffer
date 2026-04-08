@@ -25,5 +25,12 @@ coverage.xml
 # macOS
 .DS_Store
 
+# WireViz generated output (regenerate with: cd harness && wireviz bench-rig.yml)
+harness/*.svg
+harness/*.png
+harness/*.html
+harness/*.tsv
+harness/*.gv
+
 # SD card log files (keep locally, don't commit)
 *.csv

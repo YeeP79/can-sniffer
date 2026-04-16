@@ -3,7 +3,7 @@ metadata:
   description: "Bench rig for Bosch Gen 2 iBooster (2019 Honda Accord)"
   notes: >
     12V source: bench power supply (5A+) or car battery.
-    iBooster CAN pin numbers TBD — verify on actual unit.
+    iBooster CAN pin numbers confirmed from Tulay Wire Werks Gen-2 pinout diagram.
     Phase 2 connections (pressure transducers) are NOT connected initially.
 
 options:
@@ -39,22 +39,23 @@ connectors:
 
   iBooster_ECU:
     type: "Bosch Gen 2 iBooster — 26-pin ECU Connector"
-    pins: [1, 2, 8, 9, 20, 22, 23, CAN1_H, CAN1_L, CAN2_H, CAN2_L]
+    pins: [1, 2, 8, 9, 10, 16, 18, 20, 22, 23, 25]
     pinlabels:
-      - "Pin 1: 12V+ permanent"
-      - "Pin 2: Pedal sensor 2"
-      - "Pin 8: Pedal sensor 4"
-      - "Pin 9: GND"
-      - "Pin 20: 12V+ ignition switched"
-      - "Pin 22: Pedal sensor 1"
-      - "Pin 23: Pedal sensor 3"
-      - "CAN1_H (TBD — verify on unit)"
-      - "CAN1_L (TBD — verify on unit)"
-      - "CAN2_H (TBD — verify on unit)"
-      - "CAN2_L (TBD — verify on unit)"
+      - "Pin 1: 12V+ Always Hot (40A Fuse)"
+      - "Pin 2: Pedal Travel Sensor 2"
+      - "Pin 8: Pedal Travel Sensor 4"
+      - "Pin 9: Chassis Ground"
+      - "Pin 10: Yaw CAN-Low"
+      - "Pin 16: Vehicle CAN-High"
+      - "Pin 18: Yaw CAN-High"
+      - "Pin 20: 12V+ Ign Switched (5A Fuse)"
+      - "Pin 22: Pedal Travel Sensor 1"
+      - "Pin 23: Pedal Travel Sensor 3"
+      - "Pin 25: Vehicle CAN-Low"
     notes: >
-      Only populated pins shown. CAN bus pin numbers TBD —
-      verify on actual iBooster unit before wiring.
+      CAN pin numbers confirmed from Tulay Wire Werks Gen-2 pinout diagram.
+      CAN wires added by Tulay: Pin 16 Orange, Pin 25 Orange/Black,
+      Pin 18 Violet, Pin 10 Violet/Black.
 
   iBooster_TravelSensor:
     type: "Bosch Gen 2 Travel Sensor — 4-pin"
@@ -88,16 +89,16 @@ connectors:
 
   SN65HVD230:
     type: "Waveshare CAN Transceiver (3.3V)"
-    subtype: "CAN Bus #1"
+    subtype: "Vehicle CAN Bus #1"
     pins: [VCC, GND, TX, RX, CANH, CANL]
-    pinlabels: [3.3V, Ground, TX (from ESP32), RX (to ESP32), CAN High, CAN Low]
+    pinlabels: [3.3V, Ground, TX (from ESP32), RX (to ESP32), "CAN High → iBooster Pin 16 (OG)", "CAN Low → iBooster Pin 25 (OG/BK)"]
     notes: "120Ω termination resistor across CANH-CANL"
 
   MCP2515:
     type: "MCP2515 + TJA1050 CAN Module (5V)"
-    subtype: "CAN Bus #2"
+    subtype: "Yaw CAN Bus #2"
     pins: [VCC, GND, SI, SO, SCK, CS, INT, CANH, CANL]
-    pinlabels: [5V (NOT 3.3V!), Ground, MOSI, MISO, SCK, CS, INT, CAN High, CAN Low]
+    pinlabels: [5V (NOT 3.3V!), Ground, MOSI, MISO, SCK, CS, INT, "CAN High → iBooster Pin 18 (VT)", "CAN Low → iBooster Pin 10 (VT/BK)"]
     notes: "120Ω termination resistor across CANH-CANL"
 
   ADS1115:
@@ -306,9 +307,9 @@ cables:
   W_CAN1_Bus:
     wirecount: 2
     gauge: 22 AWG
-    colors: [YE, GNBU]
-    wirelabels: ["CAN1 High", "CAN1 Low"]
-    notes: "120Ω termination at SN65HVD230 end"
+    colors: [OG, OGBK]
+    wirelabels: ["Vehicle CAN High (Pin 16)", "Vehicle CAN Low (Pin 25)"]
+    notes: "120Ω termination at SN65HVD230 end. Solid=High, Tracer=Low."
 
   # === CAN BUS #2 (ESP32 SPI → MCP2515 → iBooster) ===
 
@@ -321,9 +322,9 @@ cables:
   W_CAN2_Bus:
     wirecount: 2
     gauge: 22 AWG
-    colors: [YE, GNBU]
-    wirelabels: ["CAN2 High", "CAN2 Low"]
-    notes: "120Ω termination at MCP2515 end"
+    colors: [VT, VTBK]
+    wirelabels: ["Yaw CAN High (Pin 18)", "Yaw CAN Low (Pin 10)"]
+    notes: "120Ω termination at MCP2515 end. Solid=High, Tracer=Low."
 
   # === SPI SD CARD ===
 
@@ -549,7 +550,7 @@ connections:
   -
     - SN65HVD230: [CANH, CANL]
     - W_CAN1_Bus: [1, 2]
-    - iBooster_ECU: [CAN1_H, CAN1_L]
+    - iBooster_ECU: [16, 25]
 
   # ============================================================
   # CAN BUS #2 — ESP32 SPI → MCP2515 → iBooster
@@ -565,7 +566,7 @@ connections:
   -
     - MCP2515: [CANH, CANL]
     - W_CAN2_Bus: [1, 2]
-    - iBooster_ECU: [CAN2_H, CAN2_L]
+    - iBooster_ECU: [18, 10]
 
   # ============================================================
   # SPI SD CARD — Shared bus with unique CS
